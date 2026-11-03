@@ -105,8 +105,8 @@ class MockLLMProvider(BaseLLMProvider):
 
             # Recipient extraction across languages
             recip_patterns = [
-                # English / Pidgin: to David, give David, dash David
-                r"\b(?:to|give|dash)\s+([a-zA-Z]+)(?:\s|$)",
+                # English / Pidgin: to David, give David, dash David, for David
+                r"\b(?:to|give|dash|for)\s+([a-zA-Z]+)(?:\s|$)",
                 r"\b(?:send|transfer|wire|pay)\s+([a-zA-Z]+)\s+(?:₦|n|\d+|some|money)",
                 # Yoruba: si David, fún David
                 r"\b(?:si|fún|fun)\s+([a-zA-Z]+)(?:\s|$)",
