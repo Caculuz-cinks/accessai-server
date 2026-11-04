@@ -1,4 +1,4 @@
-# Voice Intent Service for Blind & Low-Vision Fintech Apps
+# Voice Intent Service for Blind & Low-Vision Fintech Apps.
 
 A high-reliability, zero-guessing voice intent interpretation service designed for Android banking applications used by blind and low-vision users in Nigeria.
 
