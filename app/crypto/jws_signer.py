@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import sys
 import time
 from typing import Any
 
@@ -12,8 +13,8 @@ from app.config import settings
 
 
 def canonical_json(data: Any) -> str:
-    """Returns deterministic canonical JSON string with sorted keys and no whitespace."""
-    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+    """Returns deterministic canonical JSON string with sorted keys, no whitespace, and UTF-8 characters."""
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def hash_params(params: dict[str, Any]) -> str:
@@ -34,6 +35,14 @@ class JWSSigner:
             raw_bytes = base64.b64decode(private_key_b64)
             self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(raw_bytes)
         else:
+            if (
+                settings.APP_ENV == "production"
+                and not settings.DEBUG
+                and "pytest" not in sys.modules
+            ):
+                raise RuntimeError(
+                    "ED25519_PRIVATE_KEY_B64 must be configured in production to ensure key persistence across restarts and instances."
+                )
             # Generate a fresh key pair
             self._private_key = ed25519.Ed25519PrivateKey.generate()
 
@@ -100,11 +109,14 @@ class JWSSigner:
         expires_at = current_time + ttl_seconds
 
         payload_dict = {
-            "iss": "voice-intent-service",
+            "iss": "accessai",
             "sub": session_id,
+            "aid": action,
             "action": action,
+            "ph": hash_params(params),
             "params_hash": hash_params(params),
             "params": params,
+            "jti": nonce,
             "nonce": nonce,
             "iat": current_time,
             "exp": expires_at,

@@ -86,12 +86,12 @@ async def test_full_api_workflow():
         conf_id = pending["confirmation_id"]
         assert pending["status"] == "pending"
 
-        # 6. POST /v1/confirmations/{id}/confirm with informal "yes" -> MUST BE REJECTED
+        # 6. POST /v1/confirmations/{id}/confirm with informal "yes" -> MUST BE REJECTED (422 not_a_confirmation)
         res = await client.post(
             f"/v1/confirmations/{conf_id}/confirm", json={"utterance": "yes"}
         )
-        assert res.status_code == 400
-        assert res.json()["detail"]["status"] == "rejected"
+        assert res.status_code == 422
+        assert res.json()["error"]["code"] == "not_a_confirmation"
 
         # 7. POST /v1/confirmations/{id}/confirm with strict "confirm" -> SUCCESS
         res = await client.post(

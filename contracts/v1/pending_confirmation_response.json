@@ -1,11 +1,19 @@
 {
   "properties": {
+    "pending_id": {
+      "title": "Pending Id",
+      "type": "string"
+    },
     "confirmation_id": {
       "title": "Confirmation Id",
       "type": "string"
     },
     "session_id": {
       "title": "Session Id",
+      "type": "string"
+    },
+    "action_id": {
+      "title": "Action Id",
       "type": "string"
     },
     "action": {
@@ -17,26 +25,55 @@
       "title": "Params",
       "type": "object"
     },
+    "params_sha256": {
+      "title": "Params Sha256",
+      "type": "string"
+    },
+    "params_hash": {
+      "title": "Params Hash",
+      "type": "string"
+    },
     "status": {
+      "default": "pending",
       "title": "Status",
       "type": "string"
     },
     "spoken_prompt": {
+      "default": "",
       "title": "Spoken Prompt",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
       "type": "string"
     },
     "expires_at": {
       "title": "Expires At",
       "type": "integer"
+    },
+    "expires_at_iso": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At Iso"
     }
   },
   "required": [
+    "pending_id",
     "confirmation_id",
     "session_id",
+    "action_id",
     "action",
     "params",
-    "status",
-    "spoken_prompt",
+    "params_sha256",
+    "params_hash",
     "expires_at"
   ],
   "title": "PendingConfirmationResponse",

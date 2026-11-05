@@ -71,16 +71,9 @@
       "title": "Confirmation Id"
     },
     "method": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
       "default": "voice",
-      "title": "Method"
+      "title": "Method",
+      "type": "string"
     },
     "utterance": {
       "anyOf": [

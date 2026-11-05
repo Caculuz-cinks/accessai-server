@@ -18,7 +18,7 @@ class MockLLMProvider(BaseLLMProvider):
         screen_descriptor: str | None = None,
         dialog_state: dict[str, Any] | None = None,
     ) -> LLMInterpretationResult:
-        manifest_names = {item["name"] for item in manifest}
+        manifest_ids = {item.get("id") or item.get("name") for item in manifest}
         text = utterance.strip().lower()
 
         # 1. Check for balance inquiries in all 8 languages
@@ -39,13 +39,19 @@ class MockLLMProvider(BaseLLMProvider):
             r"\b(cuál es mi saldo|cual es mi saldo|consultar saldo|ver mi saldo|cuánto tengo en mi cuenta)\b",
         ]
         for pat in balance_patterns:
-            if re.search(pat, text, re.IGNORECASE) and "get_balance" in manifest_names:
+            if re.search(pat, text, re.IGNORECASE) and "get_balance" in manifest_ids:
                 return LLMInterpretationResult(
                     tool_calls=[ToolCall(name="get_balance", arguments={})],
                     confidence=0.96,
                 )
 
         # 2. Check for transfer requests across all 8 languages
+        pending_action = None
+        if dialog_state:
+            pending_action = dialog_state.get("pending_intent") or dialog_state.get(
+                "pending_action_id"
+            )
+
         transfer_keywords = [
             # English & Pidgin: send, transfer, wire, pay, give, dash
             r"\b(send|transfer|wire|pay|give|dash)\b",
@@ -64,9 +70,9 @@ class MockLLMProvider(BaseLLMProvider):
         ]
         is_transfer = any(
             re.search(pat, text, re.IGNORECASE) for pat in transfer_keywords
-        )
+        ) or (pending_action == "transfer_money")
 
-        if is_transfer and "transfer_money" in manifest_names:
+        if is_transfer and "transfer_money" in manifest_ids:
             args: dict[str, Any] = {}
 
             # Pattern matching for amount extraction across languages
@@ -96,6 +102,19 @@ class MockLLMProvider(BaseLLMProvider):
                     if kobo_test is not None and kobo_test > 0:
                         raw_amount_str = candidate
                         break
+
+            # Check for bare numbers after transfer verbs (e.g. 'send 5000 to David')
+            if not raw_amount_str:
+                bare_m = re.search(
+                    r"\b(?:send|transfer|wire|pay|give|dash|firanṣẹ|firanse|ránṣẹ́|ranse|ziga|tura|envoyer|virer|überweise|uberweise|enviar)\s+(\d{2,}(?:,\d+)*(?:\.\d+)?)(?!\s*(?:k|grand|m|million|b|billion|naira|kobo))\b",
+                    text,
+                    re.IGNORECASE,
+                )
+                if bare_m:
+                    cand = bare_m.group(1).strip()
+                    kobo_test = parse_amount_to_kobo(cand)
+                    if kobo_test is not None and kobo_test > 0:
+                        raw_amount_str = cand
 
             if raw_amount_str:
                 args["amount_raw"] = raw_amount_str
@@ -177,6 +196,10 @@ class MockLLMProvider(BaseLLMProvider):
                         recipient = cand.capitalize()
                         break
 
+            if not recipient and dialog_state:
+                recipient = dialog_state.get("recipient") or dialog_state.get(
+                    "filled_params", {}
+                ).get("recipient")
             if recipient:
                 args["recipient"] = recipient
 

@@ -4,7 +4,12 @@ from typing import Any
 from anthropic import AsyncAnthropic
 
 from app.config import settings
-from app.providers.base import BaseLLMProvider, LLMInterpretationResult, ToolCall
+from app.providers.base import (
+    BaseLLMProvider,
+    LLMInterpretationResult,
+    ToolCall,
+    manifest_to_tool_schema,
+)
 
 ANTHROPIC_SYSTEM_PROMPT = """You are a multilingual voice intent interpreter for a blind or low-vision fintech Android app in Nigeria.
 Your job is to parse the user's spoken utterance and invoke the matching tool from the available tools list.
@@ -48,13 +53,12 @@ class AnthropicProvider(BaseLLMProvider):
 
         tools = []
         for action in manifest:
+            tname, tdesc, tparams = manifest_to_tool_schema(action)
             tools.append(
                 {
-                    "name": action["name"],
-                    "description": action.get("description", ""),
-                    "input_schema": action.get(
-                        "parameters", {"type": "object", "properties": {}}
-                    ),
+                    "name": tname,
+                    "description": tdesc,
+                    "input_schema": tparams,
                 }
             )
 
@@ -80,7 +84,16 @@ class AnthropicProvider(BaseLLMProvider):
             elif block.type == "text":
                 text_content += block.text
 
-        confidence = 0.96 if tool_calls_out else 0.5
+        # Dynamic confidence based on tool presence, argument completeness, and stop reason
+        if tool_calls_out:
+            has_args = any(bool(tc.arguments) for tc in tool_calls_out)
+            base_conf = 0.95 if has_args else 0.88
+            if getattr(response, "stop_reason", None) == "tool_use":
+                confidence = min(0.99, base_conf + 0.02)
+            else:
+                confidence = base_conf
+        else:
+            confidence = 0.35 if not text_content else 0.50
 
         return LLMInterpretationResult(
             tool_calls=tool_calls_out,

@@ -200,3 +200,36 @@ async def update_confirmation_status(
         )
         await db.commit()
         return result.rowcount > 0
+
+
+async def transition_confirmation_to_confirmed(
+    conf_id: str, session_id: str | None = None
+) -> bool:
+    """Atomically transitions status from 'pending' to 'confirmed' if and only if status is currently 'pending'.
+
+    Returns True if updated (first concurrent caller), False if already processed or not pending.
+    """
+    async with aiosqlite.connect(settings.DATABASE_PATH) as db:
+        if session_id:
+            cursor = await db.execute(
+                "UPDATE confirmations SET status = 'confirmed' WHERE id = ? AND session_id = ? AND status = 'pending'",
+                (conf_id, session_id),
+            )
+        else:
+            cursor = await db.execute(
+                "UPDATE confirmations SET status = 'confirmed' WHERE id = ? AND status = 'pending'",
+                (conf_id,),
+            )
+        await db.commit()
+        return cursor.rowcount == 1
+
+
+async def update_confirmation_token(conf_id: str, token: str) -> bool:
+    """Saves the minted JWS token for a confirmed confirmation."""
+    async with aiosqlite.connect(settings.DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE confirmations SET token = ? WHERE id = ?",
+            (token, conf_id),
+        )
+        await db.commit()
+        return cursor.rowcount > 0

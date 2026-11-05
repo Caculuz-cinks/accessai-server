@@ -73,12 +73,12 @@ async def test_confirmation_lifecycle():
     conf_id = pending["confirmation_id"]
     assert pending["status"] == "pending"
 
-    # 2. Reject informal words like 'yes'
+    # 2. Reject informal words like 'yes' (422 not_a_confirmation)
     success, res, status_code = await ConfirmationService.process_confirm(
         conf_id, "yes"
     )
     assert success is False
-    assert status_code == 400
+    assert status_code == 422
     assert res["status"] == "rejected"
 
     # 3. Confirm with strict phrase
@@ -90,12 +90,12 @@ async def test_confirmation_lifecycle():
     assert res["status"] == "confirmed"
     assert "token" in res
 
-    # 4. Token cannot be confirmed again
+    # 4. Token cannot be confirmed again (409 confirmation_used)
     success2, _res2, status_code2 = await ConfirmationService.process_confirm(
         conf_id, "confirm"
     )
     assert success2 is False
-    assert status_code2 == 400
+    assert status_code2 == 409
 
 
 @pytest.mark.asyncio

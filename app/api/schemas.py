@@ -26,7 +26,7 @@ class SessionCreateRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     session_id: str
-    status: str
+    status: str = "active"
     app_id: str | None = None
     locale: str | None = None
     device_key: DeviceKey | None = None
@@ -48,21 +48,28 @@ class ManifestAction(BaseModel):
 
 class InterpretRequest(BaseModel):
     session_id: str
-    utterance: str
-    manifest: list[dict[str, Any]] = Field(
-        ..., description="Allowed actions exposed by the host Android app"
-    )
+    text: str | None = None
+    utterance: str | None = None
+    locale: str | None = "en-NG"
+    actions: list[dict[str, Any]] | None = None
+    manifest: list[dict[str, Any]] | None = None
     screen_descriptor: str | None = None
     screen: dict[str, Any] | list[Any] | str | None = None
+    dialog: dict[str, Any] | None = None
     dialog_state: dict[str, Any] | None = None
 
 
 class InterpretResponse(BaseModel):
-    type: str  # "action" or "clarification"
-    intent: str | None = None
-    params: dict[str, Any] | None = None
-    confidence: float
-    spoken_prompt: str
+    outcome: str = "action"  # "action" | "clarify" | "unsupported" | "control"
+    type: str = "action"  # legacy alias for outcome
+    action_id: str | None = None
+    intent: str | None = None  # legacy alias for action_id
+    params: dict[str, Any] = Field(default_factory=dict)
+    missing_params: list[str] = Field(default_factory=list)
+    control: str | None = None
+    message: str = ""
+    spoken_prompt: str = ""  # legacy alias for message
+    confidence: float = 0.95
     clarification_reason: str | None = None
     language: str = "en"
     provider: str | None = None
@@ -72,18 +79,25 @@ class InterpretResponse(BaseModel):
 
 class PendingConfirmationRequest(BaseModel):
     session_id: str
-    action: str
-    params: dict[str, Any]
+    action_id: str | None = None
+    action: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class PendingConfirmationResponse(BaseModel):
+    pending_id: str
     confirmation_id: str
     session_id: str
+    action_id: str
     action: str
     params: dict[str, Any]
-    status: str
-    spoken_prompt: str
+    params_sha256: str
+    params_hash: str
+    status: str = "pending"
+    spoken_prompt: str = ""
+    message: str = ""
     expires_at: int
+    expires_at_iso: str | None = None
 
 
 class DeviceAuth(BaseModel):
@@ -103,24 +117,29 @@ class ConfirmRequest(BaseModel):
     session_id: str | None = None
     pending_id: str | None = None
     confirmation_id: str | None = None
-    method: str | None = "voice"
+    method: str = "voice"  # "voice" | "touch"
     utterance: str | None = None
     auth: DeviceAuth | None = None
 
 
 class ConfirmResponse(BaseModel):
-    status: str
+    status: str = "confirmed"
     confirmation_id: str
+    pending_id: str
     token: str
+    nonce: str
     expires_at: int
-    spoken_prompt: str
+    spoken_prompt: str = ""
+    message: str = ""
 
 
 class CancelRequest(BaseModel):
+    session_id: str | None = None
     reason: str | None = "user_cancelled"
 
 
 class CancelResponse(BaseModel):
-    status: str
+    status: str = "cancelled"
     confirmation_id: str
-    spoken_prompt: str
+    spoken_prompt: str = ""
+    message: str = ""

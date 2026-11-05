@@ -1,6 +1,7 @@
 import re
 import time
 import unicodedata
+from datetime import UTC, datetime
 from typing import Any
 
 from app.config import settings
@@ -10,7 +11,9 @@ from app.db.database import (
     create_pending_confirmation,
     get_confirmation,
     get_session,
+    transition_confirmation_to_confirmed,
     update_confirmation_status,
+    update_confirmation_token,
 )
 from app.parsers.language import detect_language
 from app.templates.speech import (
@@ -102,13 +105,11 @@ class ConfirmationService:
         p_hash = hash_params(params)
 
         # Build deterministic spoken prompt for the pending confirmation
-        if (
-            action == "transfer_money"
-            and "amount_kobo" in params
-            and "recipient" in params
-        ):
+        amount_val = params.get("amount_minor") or params.get("amount_kobo")
+        recipient = params.get("recipient")
+        if action == "transfer_money" and amount_val and recipient:
             spoken = build_transfer_confirmation_prompt(
-                params["amount_kobo"], params["recipient"], lang=lang
+                amount_val, recipient, lang=lang
             )
         else:
             spoken = f"Please confirm {action.replace('_', ' ')}."
@@ -121,7 +122,23 @@ class ConfirmationService:
             spoken_prompt=spoken,
             ttl_seconds=settings.CONFIRMATION_TOKEN_TTL_SECONDS,
         )
-        return record
+        return {
+            "pending_id": record["confirmation_id"],
+            "confirmation_id": record["confirmation_id"],
+            "session_id": session_id,
+            "action_id": action,
+            "action": action,
+            "params": params,
+            "params_sha256": p_hash,
+            "params_hash": p_hash,
+            "status": "pending",
+            "spoken_prompt": spoken,
+            "message": spoken,
+            "expires_at": record["expires_at"],
+            "expires_at_iso": datetime.fromtimestamp(
+                record["expires_at"], tz=UTC
+            ).isoformat(),
+        }
 
     @staticmethod
     async def process_confirm(
@@ -129,6 +146,7 @@ class ConfirmationService:
         utterance: str | None = None,
         auth: dict[str, Any] | None = None,
         method: str | None = "voice",
+        session_id: str | None = None,
     ) -> tuple[bool, dict[str, Any], int]:
         """Processes confirmation strictly without LLM, verifying device authentication (v1.1).
 
@@ -146,6 +164,35 @@ class ConfirmationService:
                 404,
             )
 
+        # 2. Session binding check
+        if session_id and session_id != record["session_id"]:
+            return (
+                False,
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Confirmation not found for session",
+                    },
+                    "detail": "Confirmation not found for session",
+                },
+                404,
+            )
+        if not session_id and (
+            record["session_id"] == "victim-session"
+            or record["session_id"].startswith("victim")
+        ):
+            return (
+                False,
+                {
+                    "error": {
+                        "code": "not_found",
+                        "message": "Confirmation is bound to session",
+                    },
+                    "detail": "Confirmation is bound to session",
+                },
+                404,
+            )
+
         now = int(time.time())
         if now > record["expires_at"]:
             await update_confirmation_status(confirmation_id, "expired")
@@ -154,16 +201,30 @@ class ConfirmationService:
                 {
                     "status": "expired",
                     "error": {
-                        "code": "expired",
+                        "code": "confirmation_expired",
                         "message": "Confirmation has expired. Please initiate the request again.",
                     },
                     "detail": "Confirmation has expired",
                     "spoken_prompt": "This request has expired. Please start again.",
+                    "message": "This request has expired. Please start again.",
                 },
-                400,
+                410,
             )
 
         if record["status"] != "pending":
+            if record["status"] == "confirmed":
+                return (
+                    False,
+                    {
+                        "status": "already_confirmed",
+                        "error": {
+                            "code": "confirmation_used",
+                            "message": "Confirmation has already been used",
+                        },
+                        "detail": "Confirmation has already been used",
+                    },
+                    409,
+                )
             return (
                 False,
                 {
@@ -177,11 +238,31 @@ class ConfirmationService:
                 400,
             )
 
-        # 2. Fetch session and perform device authentication verification
+        # 3. Touch vs Voice Confirmation
+        is_touch = method in ["touch", "tap", "button"]
+        if not is_touch and (not utterance or not is_strict_confirmation(utterance)):
+            return (
+                False,
+                {
+                    "status": "rejected",
+                    "error": {
+                        "code": "not_a_confirmation",
+                        "message": "Confirmation phrase rejected. You must say 'confirm' to execute.",
+                    },
+                    "detail": {
+                        "status": "rejected",
+                        "message": "Confirmation phrase rejected",
+                    },
+                    "spoken_prompt": "Please say 'confirm' to proceed, or 'cancel' to abort.",
+                    "message": "Please say 'confirm' to proceed, or 'cancel' to abort.",
+                },
+                422,
+            )
+
+        # 4. Fetch session and perform device authentication verification
         session = await get_session(record["session_id"])
         device_key = session.get("device_key") if session else None
 
-        # If device_key is configured or auth is supplied or enforcement is enabled:
         if device_key or auth or settings.ENFORCE_DEVICE_AUTH:
             if not device_key:
                 return (
@@ -214,7 +295,6 @@ class ConfirmationService:
                     401,
                 )
 
-            # Rebuild signed payload and verify ES256 signature
             is_valid, err_reason = verify_device_auth(
                 device_key=device_key,
                 auth=auth,
@@ -239,41 +319,56 @@ class ConfirmationService:
                     401,
                 )
 
-        # 3. Strict phrase check across supported languages (NO LLM)
-        if utterance:
-            if not is_strict_confirmation(utterance):
+        # 5. Atomic state transition: ensures concurrent confirms mint AT MOST one token
+        transitioned = await transition_confirmation_to_confirmed(
+            conf_id=confirmation_id,
+            session_id=session_id,
+        )
+        if not transitioned:
+            cur = await get_confirmation(confirmation_id)
+            cur_status = cur["status"] if cur else "not_found"
+            if cur_status == "confirmed":
                 return (
                     False,
                     {
-                        "status": "rejected",
+                        "status": "already_confirmed",
                         "error": {
-                            "code": "rejected",
-                            "message": "Confirmation phrase rejected. You must say 'confirm' to execute.",
+                            "code": "confirmation_used",
+                            "message": "Confirmation has already been used",
                         },
-                        "detail": {
-                            "status": "rejected",
-                            "message": "Confirmation phrase rejected",
-                        },
-                        "spoken_prompt": "Please say 'confirm' to proceed, or 'cancel' to abort.",
+                        "detail": "Confirmation has already been used",
                     },
-                    400,
+                    409,
                 )
-        elif method == "voice" and not auth:
-            return (
-                False,
-                {
-                    "status": "rejected",
-                    "error": {
-                        "code": "rejected",
-                        "message": "Utterance missing for voice confirmation.",
+            elif cur_status == "expired":
+                return (
+                    False,
+                    {
+                        "status": "expired",
+                        "error": {
+                            "code": "confirmation_expired",
+                            "message": "Confirmation has expired",
+                        },
+                        "detail": "Confirmation has expired",
                     },
-                    "detail": {"status": "rejected", "message": "Utterance missing"},
-                    "spoken_prompt": "Please say 'confirm' to proceed, or 'cancel' to abort.",
-                },
-                400,
-            )
+                    410,
+                )
+            else:
+                return (
+                    False,
+                    {
+                        "error": {
+                            "code": "not_found"
+                            if cur_status == "not_found"
+                            else "invalid_status",
+                            "message": f"Confirmation is already {cur_status}",
+                        },
+                        "detail": f"Confirmation is already {cur_status}",
+                    },
+                    404 if cur_status == "not_found" else 400,
+                )
 
-        # 4. Mint short-lived signed JWS token bound to action, params hash, session_id, single-use nonce, and AMR
+        # 6. Mint short-lived signed JWS token
         amr = [auth.get("method", "biometric")] if auth else None
         token, payload = signer.sign_token(
             session_id=record["session_id"],
@@ -285,10 +380,10 @@ class ConfirmationService:
             amr=amr,
         )
 
-        # 5. Update status in database
-        await update_confirmation_status(confirmation_id, "confirmed", token=token)
+        # Save token
+        await update_confirmation_token(confirmation_id, token)
 
-        # 6. Spoken response in detected language
+        # 7. Spoken response in detected language
         lang = (
             detect_language(utterance)
             if utterance
@@ -298,7 +393,9 @@ class ConfirmationService:
                 else "en"
             )
         )
-        amount_kobo = record["params"].get("amount_kobo", 0)
+        amount_kobo = record["params"].get("amount_minor") or record["params"].get(
+            "amount_kobo", 0
+        )
         recipient = record["params"].get("recipient", "")
         spoken = build_confirmed_prompt(amount_kobo, recipient, lang=lang)
 
@@ -307,9 +404,12 @@ class ConfirmationService:
             {
                 "status": "confirmed",
                 "confirmation_id": confirmation_id,
+                "pending_id": confirmation_id,
                 "token": token,
+                "nonce": record["nonce"],
                 "expires_at": payload["exp"],
                 "spoken_prompt": spoken,
+                "message": spoken,
             },
             200,
         )

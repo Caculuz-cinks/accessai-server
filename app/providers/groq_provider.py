@@ -4,7 +4,12 @@ from typing import Any
 from groq import AsyncGroq
 
 from app.config import settings
-from app.providers.base import BaseLLMProvider, LLMInterpretationResult, ToolCall
+from app.providers.base import (
+    BaseLLMProvider,
+    LLMInterpretationResult,
+    ToolCall,
+    manifest_to_tool_schema,
+)
 
 SYSTEM_PROMPT = """You are a multilingual voice intent interpreter for a blind or low-vision fintech Android app in Nigeria.
 Your job is to parse the user's spoken utterance and invoke the matching tool from the available tools list.
@@ -49,15 +54,14 @@ class GroqProvider(BaseLLMProvider):
         # Convert manifest to OpenAI / Groq tool schema
         tools = []
         for action in manifest:
+            tname, tdesc, tparams = manifest_to_tool_schema(action)
             tools.append(
                 {
                     "type": "function",
                     "function": {
-                        "name": action["name"],
-                        "description": action.get("description", ""),
-                        "parameters": action.get(
-                            "parameters", {"type": "object", "properties": {}}
-                        ),
+                        "name": tname,
+                        "description": tdesc,
+                        "parameters": tparams,
                     },
                 }
             )

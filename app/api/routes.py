@@ -48,12 +48,16 @@ async def interpret_utterance(
     req: InterpretRequest,
     service: Annotated[InterpreterService, Depends(get_interpreter_service)],
 ):
+    user_text = req.text or req.utterance or ""
+    raw_manifest = req.manifest or req.actions or []
+    raw_dialog = req.dialog or req.dialog_state or {}
+
     # Defence in depth (v1.1): Reject 400 bad_request on 10+ digit runs or screen element values
     is_valid, err_reason = validate_defence_in_depth(
-        utterance=req.utterance,
+        utterance=user_text,
         screen=req.screen,
         screen_descriptor=req.screen_descriptor,
-        dialog_state=req.dialog_state,
+        dialog_state=raw_dialog,
     )
     if not is_valid:
         return JSONResponse(
@@ -67,16 +71,18 @@ async def interpret_utterance(
     # Ensure session exists
     session = await get_session(req.session_id)
     if not session:
-        # Create session if not explicitly initialized
-        await create_session(session_id=req.session_id)
+        await create_session(session_id=req.session_id, locale=req.locale)
 
     try:
         return await service.interpret_utterance(
-            utterance=req.utterance,
-            manifest=req.manifest,
+            utterance=user_text,
+            text=user_text,
+            manifest=raw_manifest,
+            actions=raw_manifest,
             screen_descriptor=req.screen_descriptor,
             screen=req.screen,
-            dialog_state=req.dialog_state,
+            dialog_state=raw_dialog,
+            dialog=raw_dialog,
         )
     except ValueError as e:
         return JSONResponse(
@@ -89,14 +95,29 @@ async def interpret_utterance(
 
 
 @router.post(
+    "/v1/confirmations", response_model=PendingConfirmationResponse, status_code=201
+)
+@router.post(
     "/v1/confirmations/pending",
     response_model=PendingConfirmationResponse,
     status_code=201,
 )
 async def create_pending_action(req: PendingConfirmationRequest):
+    action_name = req.action_id or req.action
+    if not action_name:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "bad_request",
+                    "message": "Missing action or action_id",
+                },
+                "detail": "Missing action or action_id",
+            },
+        )
     return await ConfirmationService.create_pending(
         session_id=req.session_id,
-        action=req.action,
+        action=action_name,
         params=req.params,
     )
 
@@ -109,6 +130,7 @@ async def confirm_action(id: str, req: ConfirmRequest):
         utterance=req.utterance,
         auth=auth_dict,
         method=req.method or "voice",
+        session_id=req.session_id,
     )
     if not success:
         return JSONResponse(status_code=status_code, content=result)
@@ -136,6 +158,7 @@ async def confirm_action_direct(req: ConfirmRequest):
         utterance=req.utterance,
         auth=auth_dict,
         method=req.method or "voice",
+        session_id=req.session_id,
     )
     if not success:
         return JSONResponse(status_code=status_code, content=result)

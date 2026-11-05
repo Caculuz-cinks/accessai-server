@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,6 +35,21 @@ class Settings(BaseSettings):
     # Ed25519 Key configuration (base64 private key or path)
     ED25519_PRIVATE_KEY_B64: str = ""
     JWKS_KID: str = "voice-intent-key-1"
+
+    @model_validator(mode="after")
+    def validate_production_safety(self) -> "Settings":
+        if self.APP_ENV == "production" and not self.DEBUG:
+            if self.LLM_PROVIDER == "mock":
+                raise ValueError(
+                    "LLM_PROVIDER cannot default to 'mock' in production. "
+                    "Configure 'groq' or 'anthropic' with valid credentials."
+                )
+            if not self.ED25519_PRIVATE_KEY_B64:
+                raise ValueError(
+                    "ED25519_PRIVATE_KEY_B64 must be set in production. "
+                    "Refusing to generate ephemeral keys across restarts."
+                )
+        return self
 
 
 settings = Settings()

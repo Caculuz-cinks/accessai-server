@@ -4,9 +4,29 @@
       "title": "Session Id",
       "type": "string"
     },
+    "action_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Id"
+    },
     "action": {
-      "title": "Action",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action"
     },
     "params": {
       "additionalProperties": true,
@@ -15,9 +35,7 @@
     }
   },
   "required": [
-    "session_id",
-    "action",
-    "params"
+    "session_id"
   ],
   "title": "PendingConfirmationRequest",
   "type": "object"

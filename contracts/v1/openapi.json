@@ -120,6 +120,44 @@
         }
       }
     },
+    "/v1/confirmations": {
+      "post": {
+        "summary": "Create Pending Action",
+        "operationId": "create_pending_action_v1_confirmations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PendingConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingConfirmationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/confirmations/{id}/confirm": {
       "post": {
         "summary": "Confirm Action",
@@ -332,6 +370,17 @@
     "schemas": {
       "CancelRequest": {
         "properties": {
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
           "reason": {
             "anyOf": [
               {
@@ -352,7 +401,8 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "default": "cancelled"
           },
           "confirmation_id": {
             "type": "string",
@@ -360,14 +410,18 @@
           },
           "spoken_prompt": {
             "type": "string",
-            "title": "Spoken Prompt"
+            "title": "Spoken Prompt",
+            "default": ""
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
-          "status",
-          "confirmation_id",
-          "spoken_prompt"
+          "confirmation_id"
         ],
         "title": "CancelResponse"
       },
@@ -407,14 +461,7 @@
             "title": "Confirmation Id"
           },
           "method": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Method",
             "default": "voice"
           },
@@ -447,15 +494,24 @@
         "properties": {
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "default": "confirmed"
           },
           "confirmation_id": {
             "type": "string",
             "title": "Confirmation Id"
           },
+          "pending_id": {
+            "type": "string",
+            "title": "Pending Id"
+          },
           "token": {
             "type": "string",
             "title": "Token"
+          },
+          "nonce": {
+            "type": "string",
+            "title": "Nonce"
           },
           "expires_at": {
             "type": "integer",
@@ -463,16 +519,22 @@
           },
           "spoken_prompt": {
             "type": "string",
-            "title": "Spoken Prompt"
+            "title": "Spoken Prompt",
+            "default": ""
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
           }
         },
         "type": "object",
         "required": [
-          "status",
           "confirmation_id",
+          "pending_id",
           "token",
-          "expires_at",
-          "spoken_prompt"
+          "nonce",
+          "expires_at"
         ],
         "title": "ConfirmResponse"
       },
@@ -566,18 +628,69 @@
             "type": "string",
             "title": "Session Id"
           },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
           "utterance": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Utterance"
           },
+          "locale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locale",
+            "default": "en-NG"
+          },
+          "actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actions"
+          },
           "manifest": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Manifest",
-            "description": "Allowed actions exposed by the host Android app"
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest"
           },
           "screen_descriptor": {
             "anyOf": [
@@ -609,6 +722,18 @@
             ],
             "title": "Screen"
           },
+          "dialog": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dialog"
+          },
           "dialog_state": {
             "anyOf": [
               {
@@ -624,17 +749,32 @@
         },
         "type": "object",
         "required": [
-          "session_id",
-          "utterance",
-          "manifest"
+          "session_id"
         ],
         "title": "InterpretRequest"
       },
       "InterpretResponse": {
         "properties": {
+          "outcome": {
+            "type": "string",
+            "title": "Outcome",
+            "default": "action"
+          },
           "type": {
             "type": "string",
-            "title": "Type"
+            "title": "Type",
+            "default": "action"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
           },
           "intent": {
             "anyOf": [
@@ -648,24 +788,42 @@
             "title": "Intent"
           },
           "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "missing_params": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Params"
+          },
+          "control": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Params"
+            "title": "Control"
           },
-          "confidence": {
-            "type": "number",
-            "title": "Confidence"
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
           },
           "spoken_prompt": {
             "type": "string",
-            "title": "Spoken Prompt"
+            "title": "Spoken Prompt",
+            "default": ""
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 0.95
           },
           "clarification_reason": {
             "anyOf": [
@@ -718,11 +876,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "type",
-          "confidence",
-          "spoken_prompt"
-        ],
         "title": "InterpretResponse"
       },
       "PendingConfirmationRequest": {
@@ -731,8 +884,26 @@
             "type": "string",
             "title": "Session Id"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "action": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Action"
           },
           "params": {
@@ -743,14 +914,16 @@
         },
         "type": "object",
         "required": [
-          "session_id",
-          "action",
-          "params"
+          "session_id"
         ],
         "title": "PendingConfirmationRequest"
       },
       "PendingConfirmationResponse": {
         "properties": {
+          "pending_id": {
+            "type": "string",
+            "title": "Pending Id"
+          },
           "confirmation_id": {
             "type": "string",
             "title": "Confirmation Id"
@@ -759,6 +932,10 @@
             "type": "string",
             "title": "Session Id"
           },
+          "action_id": {
+            "type": "string",
+            "title": "Action Id"
+          },
           "action": {
             "type": "string",
             "title": "Action"
@@ -768,27 +945,55 @@
             "type": "object",
             "title": "Params"
           },
+          "params_sha256": {
+            "type": "string",
+            "title": "Params Sha256"
+          },
+          "params_hash": {
+            "type": "string",
+            "title": "Params Hash"
+          },
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "default": "pending"
           },
           "spoken_prompt": {
             "type": "string",
-            "title": "Spoken Prompt"
+            "title": "Spoken Prompt",
+            "default": ""
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
           },
           "expires_at": {
             "type": "integer",
             "title": "Expires At"
+          },
+          "expires_at_iso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At Iso"
           }
         },
         "type": "object",
         "required": [
+          "pending_id",
           "confirmation_id",
           "session_id",
+          "action_id",
           "action",
           "params",
-          "status",
-          "spoken_prompt",
+          "params_sha256",
+          "params_hash",
           "expires_at"
         ],
         "title": "PendingConfirmationResponse"
@@ -862,7 +1067,8 @@
           },
           "status": {
             "type": "string",
-            "title": "Status"
+            "title": "Status",
+            "default": "active"
           },
           "app_id": {
             "anyOf": [
@@ -913,7 +1119,6 @@
         "type": "object",
         "required": [
           "session_id",
-          "status",
           "created_at",
           "updated_at"
         ],

@@ -47,6 +47,7 @@
       "type": "string"
     },
     "status": {
+      "default": "active",
       "title": "Status",
       "type": "string"
     },
@@ -101,7 +102,6 @@
   },
   "required": [
     "session_id",
-    "status",
     "created_at",
     "updated_at"
   ],

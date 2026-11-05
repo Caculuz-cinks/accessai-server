@@ -1,6 +1,7 @@
 {
   "properties": {
     "status": {
+      "default": "confirmed",
       "title": "Status",
       "type": "string"
     },
@@ -8,8 +9,16 @@
       "title": "Confirmation Id",
       "type": "string"
     },
+    "pending_id": {
+      "title": "Pending Id",
+      "type": "string"
+    },
     "token": {
       "title": "Token",
+      "type": "string"
+    },
+    "nonce": {
+      "title": "Nonce",
       "type": "string"
     },
     "expires_at": {
@@ -17,16 +26,22 @@
       "type": "integer"
     },
     "spoken_prompt": {
+      "default": "",
       "title": "Spoken Prompt",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
       "type": "string"
     }
   },
   "required": [
-    "status",
     "confirmation_id",
+    "pending_id",
     "token",
-    "expires_at",
-    "spoken_prompt"
+    "nonce",
+    "expires_at"
   ],
   "title": "ConfirmResponse",
   "type": "object"

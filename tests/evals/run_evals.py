@@ -1,12 +1,16 @@
+import argparse
 import asyncio
 import json
-import os
 import sys
+import time
+from pathlib import Path
 from typing import Any
 
-# Ensure current directory is on python path
-sys.path.insert(0, os.path.abspath("."))
+# Ensure project root is on python path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from app.providers.anthropic_provider import AnthropicProvider
+from app.providers.groq_provider import GroqProvider
 from app.providers.mock_provider import MockLLMProvider
 from app.services.interpreter import InterpreterService
 
@@ -33,22 +37,33 @@ MANIFEST = [
 
 
 def load_dataset() -> list[dict[str, Any]]:
-    with open("tests/evals/dataset.json", encoding="utf-8") as f:
+    dataset_path = Path(__file__).resolve().parent / "dataset.json"
+    with open(dataset_path, encoding="utf-8") as f:
         return json.load(f)
 
 
-async def run_evals() -> bool:
+def get_provider(name: str):
+    name = (name or "mock").lower()
+    if name == "groq":
+        return GroqProvider()
+    elif name == "anthropic":
+        return AnthropicProvider()
+    return MockLLMProvider()
+
+
+async def run_evals(provider_name: str = "mock") -> bool:
     dataset = load_dataset()
-    provider = MockLLMProvider()
+    provider = get_provider(provider_name)
     service = InterpreterService(provider=provider)
 
     total = len(dataset)
     correct_intent = 0
     guessed_transfers = 0
     category_stats: dict[str, dict[str, int]] = {}
+    latencies: list[float] = []
 
     print("\n=======================================================")
-    print(f"RUNNING EVALUATION ON {total} UTTERANCES")
+    print(f"RUNNING EVALUATION ON {total} UTTERANCES (Provider: {provider_name})")
     print("=======================================================\n")
 
     for item in dataset:
@@ -58,9 +73,12 @@ async def run_evals() -> bool:
             category_stats[cat] = {"total": 0, "correct": 0}
         category_stats[cat]["total"] += 1
 
+        t0 = time.perf_counter()
         result = await service.interpret_utterance(
             utterance=utterance, manifest=MANIFEST
         )
+        latency_ms = (time.perf_counter() - t0) * 1000.0
+        latencies.append(latency_ms)
 
         is_correct = False
 
@@ -98,6 +116,9 @@ async def run_evals() -> bool:
             )
 
     accuracy_pct = (correct_intent / total) * 100
+    latencies.sort()
+    p50 = latencies[int(len(latencies) * 0.50)] if latencies else 0.0
+    p95 = latencies[int(len(latencies) * 0.95)] if latencies else 0.0
 
     print("\n---------------- CATEGORY BREAKDOWN ----------------")
     for cat, stats in category_stats.items():
@@ -110,6 +131,7 @@ async def run_evals() -> bool:
     print(f"Total Utterances Evaluated : {total}")
     print(f"Intent Classification Acc  : {accuracy_pct:.2f}% (Target: >= 95.0%)")
     print(f"Guessed Transfers Emitted  : {guessed_transfers} (Target: Exactly 0)")
+    print(f"Latency p50 / p95          : {p50:.1f}ms / {p95:.1f}ms")
 
     success = True
     if accuracy_pct < 95.0:
@@ -131,5 +153,13 @@ async def run_evals() -> bool:
 
 
 if __name__ == "__main__":
-    success = asyncio.run(run_evals())
+    parser = argparse.ArgumentParser(description="Run AccessAI intent evals")
+    parser.add_argument(
+        "--provider",
+        choices=["mock", "groq", "anthropic"],
+        default="mock",
+        help="LLM provider to test (default: mock)",
+    )
+    args = parser.parse_args()
+    success = asyncio.run(run_evals(provider_name=args.provider))
     sys.exit(0 if success else 1)

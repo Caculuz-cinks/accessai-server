@@ -4,18 +4,73 @@
       "title": "Session Id",
       "type": "string"
     },
+    "text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Text"
+    },
     "utterance": {
-      "title": "Utterance",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Utterance"
+    },
+    "locale": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "en-NG",
+      "title": "Locale"
+    },
+    "actions": {
+      "anyOf": [
+        {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actions"
     },
     "manifest": {
-      "description": "Allowed actions exposed by the host Android app",
-      "items": {
-        "additionalProperties": true,
-        "type": "object"
-      },
-      "title": "Manifest",
-      "type": "array"
+      "anyOf": [
+        {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Manifest"
     },
     "screen_descriptor": {
       "anyOf": [
@@ -49,6 +104,19 @@
       "default": null,
       "title": "Screen"
     },
+    "dialog": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dialog"
+    },
     "dialog_state": {
       "anyOf": [
         {
@@ -64,9 +132,7 @@
     }
   },
   "required": [
-    "session_id",
-    "utterance",
-    "manifest"
+    "session_id"
   ],
   "title": "InterpretRequest",
   "type": "object"

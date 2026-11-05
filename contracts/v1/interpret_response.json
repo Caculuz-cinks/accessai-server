@@ -1,8 +1,26 @@
 {
   "properties": {
+    "outcome": {
+      "default": "action",
+      "title": "Outcome",
+      "type": "string"
+    },
     "type": {
+      "default": "action",
       "title": "Type",
       "type": "string"
+    },
+    "action_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action Id"
     },
     "intent": {
       "anyOf": [
@@ -17,25 +35,43 @@
       "title": "Intent"
     },
     "params": {
+      "additionalProperties": true,
+      "title": "Params",
+      "type": "object"
+    },
+    "missing_params": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Params",
+      "type": "array"
+    },
+    "control": {
       "anyOf": [
         {
-          "additionalProperties": true,
-          "type": "object"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "title": "Params"
+      "title": "Control"
     },
-    "confidence": {
-      "title": "Confidence",
-      "type": "number"
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
     },
     "spoken_prompt": {
+      "default": "",
       "title": "Spoken Prompt",
       "type": "string"
+    },
+    "confidence": {
+      "default": 0.95,
+      "title": "Confidence",
+      "type": "number"
     },
     "clarification_reason": {
       "anyOf": [
@@ -91,11 +127,6 @@
       "title": "Data Processing Notice"
     }
   },
-  "required": [
-    "type",
-    "confidence",
-    "spoken_prompt"
-  ],
   "title": "InterpretResponse",
   "type": "object"
 }

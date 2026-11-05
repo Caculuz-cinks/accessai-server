@@ -1,6 +1,7 @@
 {
   "properties": {
     "status": {
+      "default": "cancelled",
       "title": "Status",
       "type": "string"
     },
@@ -9,14 +10,18 @@
       "type": "string"
     },
     "spoken_prompt": {
+      "default": "",
       "title": "Spoken Prompt",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
       "type": "string"
     }
   },
   "required": [
-    "status",
-    "confirmation_id",
-    "spoken_prompt"
+    "confirmation_id"
   ],
   "title": "CancelResponse",
   "type": "object"
